@@ -325,6 +325,18 @@ module ActiveRecord
       end
 
       def translate_exception exception, message:, sql:, binds:
+        # TODO: Compared to how postgresql translate_execption function works, Spanner
+        # adapter only matches exception messages to some error while postgresql adapter
+        # maps error codes to ActiveRecord exceptions, e.g.
+        #         # lib/active_record/connection_adapters/postgresql_adapter.rb
+        #         # See https://www.postgresql.org/docs/current/static/errcodes-appendix.html
+        #           VALUE_LIMIT_VIOLATION = "22001"
+        #           NUMERIC_VALUE_OUT_OF_RANGE = "22003"
+        #           NOT_NULL_VIOLATION    = "23502"
+        #           FOREIGN_KEY_VIOLATION = "23503"
+        #           UNIQUE_VIOLATION      = "23505"
+        # TODO: Check whether Spanner exceptions include status codes or not
+
         if exception.is_a? Google::Cloud::FailedPreconditionError
           case exception.message
           when /.*does not specify a non-null value for these NOT NULL columns.*/,

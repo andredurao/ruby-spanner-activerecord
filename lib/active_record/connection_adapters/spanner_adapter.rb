@@ -330,6 +330,8 @@ module ActiveRecord
           when /.*does not specify a non-null value for these NOT NULL columns.*/,
                /.*must not be NULL.*/
             NotNullViolation.new message, sql: sql, binds: binds
+          when /.*already exists.*/
+            RecordNotUnique.new message, sql: sql, binds: binds
           else
             super
           end

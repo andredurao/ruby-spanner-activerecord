@@ -324,10 +324,36 @@ module ActiveRecord
         end
       end
 
+      def translate_exceptions_map exception
+        {
+          Google::Cloud::FailedPreconditionError => translate_failed_pre_conditions,
+          Google::Cloud::AlreadyExistsError => translate_already_exists
+        }
+      end
+
+      def translate_failed_pre_conditions exception, &block
+        case exception.message
+        when /.*does not specify a non-null value for these NOT NULL columns.*/,
+             /.*must not be NULL.*/
+          NotNullViolation.new message, sql: sql, binds: binds
+        else
+          yield
+        end
+      end
+
+      def translate_already_exists exception, &block
+        case exception.message
+        when /.*already exists.*/
+          RecordNotUnique.new message, sql: sql, binds: binds
+        else
+          yield
+        end
+      end
+
       def translate_exception exception, message:, sql:, binds:
-        # TODO: Compared to how postgresql translate_execption function works, Spanner
-        # adapter only matches exception messages to some error while postgresql adapter
-        # maps error codes to ActiveRecord exceptions, e.g.
+        # TODO: Comparing how postgresql activerecord adapter translate_exception
+        # function works, Spanner adapter only matches exception messages to some error
+        # while postgresql adapter maps error codes to ActiveRecord exceptions, e.g.
         #         # lib/active_record/connection_adapters/postgresql_adapter.rb
         #         # See https://www.postgresql.org/docs/current/static/errcodes-appendix.html
         #           VALUE_LIMIT_VIOLATION = "22001"
@@ -336,12 +362,22 @@ module ActiveRecord
         #           FOREIGN_KEY_VIOLATION = "23503"
         #           UNIQUE_VIOLATION      = "23505"
         # TODO: Check whether Spanner exceptions include status codes or not
+        # There was no status codes in the exception, the sql contained only the "COMMIT"
+        # value and binds contained an empty array
+        # Sample message from spanner when there's an unique constraint violation
+        # "Google::Cloud::AlreadyExistsError: 6:Table my_sample_table: Row {Int64(9999)} already exists.. debug_error_string:{UNKNOWN:Error received from peer  {grpc_message:\"Table my_sample_table: Row {Int64(9999)} already exists.\", grpc_status:6}}"
 
-        if exception.is_a? Google::Cloud::FailedPreconditionError
+        case exception.class
+        when Google::Cloud::FailedPreconditionError
           case exception.message
           when /.*does not specify a non-null value for these NOT NULL columns.*/,
                /.*must not be NULL.*/
             NotNullViolation.new message, sql: sql, binds: binds
+          else
+            super
+          end
+        when Google::Cloud::AlreadyExistsError
+          case exception.message
           when /.*already exists.*/
             RecordNotUnique.new message, sql: sql, binds: binds
           else

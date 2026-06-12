@@ -325,11 +325,19 @@ module ActiveRecord
       end
 
       def translate_exception exception, message:, sql:, binds:
-        if exception.is_a? Google::Cloud::FailedPreconditionError
+        case exception
+        when Google::Cloud::FailedPreconditionError
           case exception.message
           when /.*does not specify a non-null value for these NOT NULL columns.*/,
                /.*must not be NULL.*/
             NotNullViolation.new message, sql: sql, binds: binds
+          else
+            super
+          end
+        when Google::Cloud::AlreadyExistsError
+          case exception.message
+          when /.*already exists.*/
+            RecordNotUnique.new message, sql: sql, binds: binds
           else
             super
           end

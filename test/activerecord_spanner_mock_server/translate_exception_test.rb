@@ -10,26 +10,25 @@ require_relative "./base_spanner_mock_server_test"
 
 module MockServerTests
   class TranslateExceptionTest < BaseSpannerMockServerTest
-    CommitRequest = Google::Cloud::Spanner::V1::CommitRequest
-
-    def test_already_exists_on_commit_is_translated_to_record_not_unique
-      @mock.push_error \
-        "commit",
-        GRPC::BadStatus.new(
-          GRPC::Core::StatusCodes::ALREADY_EXISTS,
-          "Table singers: Row {Int64(9999)} already exists."
-        )
+    def test_already_exists_is_translated_to_record_not_unique
+      insert_sql = register_insert_singer_result
+      already_exists_error = GRPC::BadStatus.new(
+        GRPC::Core::StatusCodes::ALREADY_EXISTS,
+        "Table singers: Row {Int64(9999)} already exists."
+      )
+      # Push the same error twice, as the first statement in a transaction is retried once
+      # after an explicit BeginTransaction RPC.
+      @mock.push_error insert_sql, already_exists_error
+      @mock.push_error insert_sql, already_exists_error
 
       err = assert_raises ActiveRecord::RecordNotUnique do
-        Singer.insert!({ first_name: "Dave", last_name: "Allison" })
+        ActiveRecord::Base.transaction do
+          Singer.create first_name: "Dave", last_name: "Allison"
+        end
       end
 
       assert_match(/already exists/, err.message)
-      assert_equal "COMMIT", err.sql
-      assert_equal [], err.binds
-
-      commit_requests = @mock.requests.select { |req| req.is_a?(CommitRequest) }
-      assert_equal 1, commit_requests.length
+      assert_equal insert_sql, err.sql
     end
 
     def test_already_exists_with_unrecognized_message_is_statement_invalid

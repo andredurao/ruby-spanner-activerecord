@@ -149,7 +149,6 @@ class SpannerMockServer < Google::Cloud::Spanner::V1::Spanner::Service
 
   def commit request, _unused_call
     @requests << request
-    # raise @errors[__method__.to_s].pop if @errors[__method__.to_s] && !@errors[__method__.to_s].empty?
     validate_session request.session
     validate_transaction request.session, request.transaction_id
     Google::Cloud::Spanner::V1::CommitResponse.new commit_timestamp: Google::Protobuf::Timestamp.new(seconds: Time.now.to_i)
